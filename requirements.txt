@@ -2,3 +2,4 @@ openai
 streamlit
 replicate
 fal-client
+litellm

@@ -7,12 +7,17 @@ from io import BytesIO
 from openai import OpenAI
 import replicate
 import fal_client
-import asyncio
+from litellm import completion
+
 
 ANTHROPIC_API_KEY = st.secrets.get('ANTHROPIC_API_KEY', '')
 OPENAI_API_KEY = st.secrets.get('OPENAI_API_KEY', '')
 REPLICATE_API_TOKEN = st.secrets.get('REPLICATE_API_TOKEN', '')
 FAL_KEY = st.secrets.get('FAL_KEY', '')
+
+import os
+os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
 
 # openai.api_key = OPENAI_API_KEY
 
@@ -50,6 +55,25 @@ for key, value in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+def make_api_call():
+    model = random.choice(["gpt-4o-2024-08-06", "claude-3-5-sonnet-20240620"])
+    # model = "claude-3-5-sonnet-20240620"
+
+    response = completion(
+        model=model,
+        messages=st.session_state.messages,
+        max_tokens=600
+    )
+    
+    msg = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": msg})
+
+    image_url = generate_image(msg)
+    print("IMAGE URL: ", image_url)
+    st.session_state.current_image = image_url
+    st.session_state.loading = False
+
+    st.rerun()
 
 def generate_outfit_callback():
     st.session_state.loading = True
@@ -67,19 +91,7 @@ def generate_outfit_callback():
     outfit_message = generate_outfit_message(details)
     st.session_state.messages.append(outfit_message)
 
-    response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        messages=st.session_state.messages,
-        max_tokens=600
-    )
-
-    msg = response.choices[0].message.content
-    st.session_state.messages.append({"role": "assistant", "content": msg})
-
-    image_url = generate_image(msg)
-    print("IMAGE URL: ", image_url)
-    st.session_state.current_image = image_url
-    st.session_state.loading = False
+    make_api_call()
 
 def rate_outfit_callback(liked):
     st.session_state.loading = True
@@ -88,33 +100,8 @@ def rate_outfit_callback(liked):
     prompt = "I liked the outfit design. Please generate a new outfit design that I may like" if liked else "I did not like the outfit design. Please generate a new outfit design that I may like"
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        messages=st.session_state.messages,
-        max_tokens=600
-    )
+    make_api_call()
 
-    msg = response.choices[0].message.content
-    st.session_state.messages.append({"role": "assistant", "content": msg})
-
-    image_url = generate_image(msg)
-    st.session_state.current_image = image_url
-    st.session_state.loading = False
-
-# def generate_image(prompt):
-#     input_data = {
-#         "prompt": prompt,
-#         "guidance": 3.5,
-#         "aspect_ratio": "9:16",
-#         "output_format": "jpg"
-#     }
-
-#     output = replicate_client.run(
-#         "black-forest-labs/flux-dev",
-#         input=input_data
-#     )
-#     print("OUTPUT IMAGE: ", output)
-#     return output[0]  # Return the first image URL
 def generate_image(prompt):
     print("Generating image with prompt: ", prompt)
     # 70% chance to use Replicate
@@ -150,14 +137,6 @@ def generate_image(prompt):
         return result['images'][0]['url']
 
 
-async def async_chatgpt_call(messages):
-    response = await client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        messages=messages,
-        max_tokens=600
-    )
-    return response
-
 def generate_outfit_message(details):
     description_parts = []
     
@@ -191,38 +170,6 @@ def generate_outfit_message(details):
     }
 
 
-def rate_outfit(liked):
-    st.session_state.loading = True
-    st.session_state.current_image = None
-
-    if liked:
-        prompt = "I liked the outfit design. Please generate a new outfit design that I may like"
-    else:
-        prompt = "I did not like the outfit design. Please generate a new outfit design that I may like"
-
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-    # with st.spinner('Generating outfit based on your feedback...'):
-    response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        messages=st.session_state.messages,
-        max_tokens=600
-    )
-
-    msg = response.choices[0].message.content
-    st.session_state.messages.append({"role": "assistant", "content": msg})
-
-    # Generate image using Replicate API
-    image_url = generate_image(msg)
-    print("IMAGE URL: ", image_url)
-    st.session_state.current_image = image_url
-
-    st.session_state.loading = False  
-
-    st.rerun()
-
-    return
-
 
 def get_random_image_url():
     return f"https://picsum.photos/400/600?random={random.randint(1, 1000)}"
@@ -242,6 +189,7 @@ if 'loading' not in st.session_state:
 # Sidebar for input
 with st.sidebar:
     st.title("Dress Gen 👗")
+    st.caption("Give as much info about the event you are attending and our AI will generate outfits")
 
     # Add Generate Outfit and Reset buttons at the top
     col1, col2 = st.columns([1, 2])
@@ -357,15 +305,16 @@ if st.session_state.current_image:
 
     if prompt := st.chat_input():
       st.session_state.messages.append({"role": "user", "content": prompt})
-      response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        messages=st.session_state.messages,
-        max_tokens=600
-      )
-      msg = response.choices[0].message.content
-      st.session_state.messages.append({"role": "assistant", "content": msg})
-      image_url = generate_image(msg)
-      st.session_state.current_image = image_url
-      st.session_state.loading = False
-      st.rerun()
+      make_api_call()
+      # response = client.chat.completions.create(
+      #   model="gpt-4o-2024-08-06",
+      #   messages=st.session_state.messages,
+      #   max_tokens=600
+      # )
+      # msg = response.choices[0].message.content
+      # st.session_state.messages.append({"role": "assistant", "content": msg})
+      # image_url = generate_image(msg)
+      # st.session_state.current_image = image_url
+      # st.session_state.loading = False
+      # st.rerun()
  
