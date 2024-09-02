@@ -6,16 +6,32 @@ import requests
 from io import BytesIO
 from openai import OpenAI
 import replicate
+import fal_client
 import asyncio
 
 ANTHROPIC_API_KEY = st.secrets.get('ANTHROPIC_API_KEY', '')
 OPENAI_API_KEY = st.secrets.get('OPENAI_API_KEY', '')
 REPLICATE_API_TOKEN = st.secrets.get('REPLICATE_API_TOKEN', '')
+FAL_KEY = st.secrets.get('FAL_KEY', '')
 
 # openai.api_key = OPENAI_API_KEY
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
+
+# Reducing whitespace on the top of the page
+st.markdown("""
+<style>
+
+.block-container
+{
+    padding-top: 1rem;
+    padding-bottom: 0rem;
+    margin-top: 1rem;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 
 # Default values
@@ -34,20 +50,104 @@ for key, value in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
-def generate_image(prompt):
-    input_data = {
-        "prompt": prompt,
-        "guidance": 3.5,
-        "aspect_ratio": "9:16",
-        "output_format": "jpg"
-    }
 
-    output = replicate_client.run(
-        "black-forest-labs/flux-dev",
-        input=input_data
+def generate_outfit_callback():
+    st.session_state.loading = True
+    st.session_state.current_image = None
+    details = {
+        "location": st.session_state.location,
+        "dress_code": st.session_state.dress_code,
+        "season": st.session_state.season,
+        "hair_color": st.session_state.hair_color,
+        "skin_tone": st.session_state.skin_tone,
+        "venue_type": st.session_state.venue_type,
+        "event_type": st.session_state.event_type,
+        "extra_details": st.session_state.extra_details
+    }
+    outfit_message = generate_outfit_message(details)
+    st.session_state.messages.append(outfit_message)
+
+    response = client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        messages=st.session_state.messages,
+        max_tokens=600
     )
-    print("OUTPUT IMAGE: ", output)
-    return output[0]  # Return the first image URL
+
+    msg = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": msg})
+
+    image_url = generate_image(msg)
+    print("IMAGE URL: ", image_url)
+    st.session_state.current_image = image_url
+    st.session_state.loading = False
+
+def rate_outfit_callback(liked):
+    st.session_state.loading = True
+    st.session_state.current_image = None
+
+    prompt = "I liked the outfit design. Please generate a new outfit design that I may like" if liked else "I did not like the outfit design. Please generate a new outfit design that I may like"
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    response = client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        messages=st.session_state.messages,
+        max_tokens=600
+    )
+
+    msg = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": msg})
+
+    image_url = generate_image(msg)
+    st.session_state.current_image = image_url
+    st.session_state.loading = False
+
+# def generate_image(prompt):
+#     input_data = {
+#         "prompt": prompt,
+#         "guidance": 3.5,
+#         "aspect_ratio": "9:16",
+#         "output_format": "jpg"
+#     }
+
+#     output = replicate_client.run(
+#         "black-forest-labs/flux-dev",
+#         input=input_data
+#     )
+#     print("OUTPUT IMAGE: ", output)
+#     return output[0]  # Return the first image URL
+def generate_image(prompt):
+    print("Generating image with prompt: ", prompt)
+    # 70% chance to use Replicate
+    use_replicate = random.random() < 0.7
+    
+    if use_replicate:
+        input_data = {
+            "prompt": prompt,
+            "guidance": 3.5,
+            "aspect_ratio": "9:16",
+            "output_format": "jpg"
+        }
+        output = replicate_client.run(
+            "black-forest-labs/flux-dev",
+            input=input_data
+        )
+        print("Using Replicate API")
+        return output[0]  # Return the first image URL
+    else:
+        handler = fal_client.submit(
+            "fal-ai/flux-realism",
+            arguments={
+                "prompt": prompt,
+                "image_size": "portrait_16_9",  # This is the closest to 9:16 aspect ratio
+                "num_inference_steps": 28,
+                "guidance_scale": 3.5,
+                "num_images": 1,
+                "output_format": "jpeg"
+            },
+        )
+        result = handler.get()
+        print("Using Fal API")
+        return result['images'][0]['url']
 
 
 async def async_chatgpt_call(messages):
@@ -114,6 +214,7 @@ def rate_outfit(liked):
 
     # Generate image using Replicate API
     image_url = generate_image(msg)
+    print("IMAGE URL: ", image_url)
     st.session_state.current_image = image_url
 
     st.session_state.loading = False  
@@ -138,13 +239,6 @@ if 'loading' not in st.session_state:
     st.session_state.loading = False
 
 
-# # if 'messages' not in st.session_state:
-# #     st.session_state.messages = []
-# if 'current_outfit' not in st.session_state:
-#     st.session_state.current_outfit = None
-# if 'feedback' not in st.session_state:
-#     st.session_state.feedback = []
-
 # Sidebar for input
 with st.sidebar:
     st.title("Dress Gen 👗")
@@ -161,7 +255,8 @@ with st.sidebar:
                 st.session_state.loading = False
             st.rerun()
     with col2:
-      generate_button = st.button("✨ Generate Outfit")
+      # generate_button = st.button("✨ Generate Outfit")
+      st.button("✨ Generate Outfit", on_click=generate_outfit_callback)
 
     location = st.text_input("📍 Wedding location", value=st.session_state["location"], key="location")
     dress_code = st.text_input("👗 Dress code", value=st.session_state["dress_code"], key="dress_code")
@@ -234,129 +329,43 @@ with st.sidebar:
     )
     extra_details = st.text_area("📝 Any extra details?", value=st.session_state["extra_details"], key="extra_details")
 
-    if generate_button:
-        st.session_state.loading = True 
-        st.session_state.current_image = None  # Reset the current image
-        details = {
-            "location": location,
-            "dress_code": dress_code,
-            "season": season,
-            "hair_color": hair_color,
-            "skin_tone": skin_tone,
-            "venue_type": venue_type,
-            "event_type": event_type,
-            "extra_details": extra_details
-        }
-        outfit_message = generate_outfit_message(details)
-        st.session_state.messages.append(outfit_message)
-
-
-        # response = asyncio.run(async_chatgpt_call(st.session_state.messages))
-
-        response = client.chat.completions.create(
-            model="gpt-4o-2024-08-06",
-            messages=st.session_state.messages,
-            max_tokens=600
-        )
-
-        msg = response.choices[0].message.content
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-
-        # # Generate image using Replicate API
-        image_url = generate_image(msg)
-        print("IMAGE URL: ", image_url)
-        st.session_state.current_image = image_url
-        st.session_state.loading = False
-
-
-        
-        # st.rerun()
-        # rating_message = generate_rating_message(False)
-
-        # st.session_state.messages.append(outfit_message)
-        # st.session_state.messages.append(rating_message)
-
-        # print(st.session_state.current_outfit)
-        # st.session_state.current_outfit = new_outfit
-        # st.session_state.current_image = get_random_image_url()
-        # st.session_state.messages.append({"role": "assistant", "content": new_outfit})
-        # st.session_state.messages.append({"role": "assistant", "content": st.session_state.current_outfit})
-
-
-# Main area for chat and image display
-# Main area for chat and image display
-# for message in st.session_state.messages:
-#     with st.chat_message(message["role"]):
-#         st.write(message["content"])
-
-
-st.write("LOADING: ", st.session_state.loading)
+    st.link_button("Join the Discord", "https://discord.gg/TPmx2Kmrzz")
 
 if st.session_state.current_image:
-    # st.image(st.session_state.current_image, caption=st.session_state.current_outfit, width=300)
   left_co, cent_co,last_co, other_co = st.columns(4)
   with cent_co:
-      # st.image(st.session_state.current_image, caption=st.session_state.current_image, width=300)
-      # if st.session_state.current_image:
-      #     st.image(st.session_state.current_image, caption=st.session_state.current_image, width=300)
-      # else:
-      #     with st.spinner('Generating your outfit...'):
-      #         time.sleep(5) 
       st.image(st.session_state.current_image, caption="", width=300)
-  # if st.session_state.loading:
-  #     with st.spinner('Generating your outfit...'):
-  #         time.sleep(5) # Spinner is shown while loading is True
-  # elif st.session_state.current_image:
-  #     st.image(st.session_state.current_image, caption="", width=300)
-    # st.image(st.session_state.current_image, 
-    #          caption=st.session_state.current_outfit, 
-    #      width=300)
 
 
 if st.session_state.loading:
     with st.spinner('Generating your outfit...'):
         time.sleep(5)
 
-if st.session_state.current_image:  
-  with st.container():
-      col1, col2, col3 = st.columns(3)
-      with col1:
-          if st.button("Dislike 👎", key="dislike_button", use_container_width=True):
-              # st.session_state.feedback.append(("dislike", st.session_state.current_outfit))
-              # st.info("Got it! Let's try something different...")
-              rate_outfit(False)
-              # time.sleep(1)  # Simulating processing time
-              # st.session_state.current_outfit = generate_outfit({})
-              # st.session_state.current_image = get_random_image_url()
-              # st.experimental_rerun()
-      with col2:
-          # for msg in st.session_state.messages:
-          #     st.chat_message(msg["role"]).write(msg["content"])
+if st.session_state.current_image: 
+    with st.container():
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.button("Dislike 👎", key="dislike_button", on_click=rate_outfit_callback, args=(False,), use_container_width=True)
+        with col2:
+            st.link_button("Shop 🛍️", f"https://dupe.com/{st.session_state.current_image}", use_container_width=True)
+        with col3:
+            st.button("Like 👍", key="like_button", on_click=rate_outfit_callback, args=(True,), use_container_width=True) 
 
-          st.link_button("Shop 🛍️", 
-                          f"https://dupe.com/{st.session_state.current_image}", 
-                          use_container_width=True)
-      with col3:
-          if st.button("Like 👍", key="like_button", use_container_width=True):
-              # st.session_state.feedback.append(("like", st.session_state.current_outfit))
-              # st.success("Thanks for your feedback! Generating a new outfit...")
-              # time.sleep(1)  # Simulating processing time
-              rate_outfit(True)
-            # st.session_state.current_outfit = generate_outfit({})
-            # st.session_state.current_image = get_random_image_url()
-            # st.experimental_rerun()
 
-# Display feedback history
-# if st.session_state.feedback:
-#     st.header("Your Feedback History")
-#     for feedback, outfit in st.session_state.feedback:
-#         st.write(f"{'👍' if feedback == 'like' else '👎'} {outfit}")
+    st.link_button("Ask the community for help", "https://discord.gg/TPmx2Kmrzz", use_container_width=True)
 
-# User input for questions or comments
-# user_input = st.chat_input("Ask a question or provide more details about your preferences")
-# if user_input:
-#     st.session_state.messages.append({"role": "user", "content": user_input})
-#     # Here you would typically process the user input and generate a response
-#     # For now, we'll just acknowledge the input
-#     st.session_state.messages.append({"role": "assistant", "content": f"Thank you for your input: '{user_input}'. I'll take that into account for future outfit suggestions."})
-#     st.experimental_rerun()
+
+    if prompt := st.chat_input():
+      st.session_state.messages.append({"role": "user", "content": prompt})
+      response = client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        messages=st.session_state.messages,
+        max_tokens=600
+      )
+      msg = response.choices[0].message.content
+      st.session_state.messages.append({"role": "assistant", "content": msg})
+      image_url = generate_image(msg)
+      st.session_state.current_image = image_url
+      st.session_state.loading = False
+      st.rerun()
+ 
