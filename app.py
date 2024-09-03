@@ -189,8 +189,8 @@ if 'loading' not in st.session_state:
 
 # Sidebar for input
 with st.sidebar:
-    st.title("Dress Gen 👗")
-    st.caption("Give as much info about the event you are attending and our AI will generate outfits")
+    st.title("fitgen.shop 👗")
+    st.caption("Give as much info about the wedding you are attending and our AI will generate outfits for you which you can then shop for!")
 
     # Add Generate Outfit and Reset buttons at the top
     col1, col2 = st.columns([1, 2])
