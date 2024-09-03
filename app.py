@@ -114,39 +114,50 @@ def rate_outfit_callback(liked):
 
     make_api_call()
 
-def generate_image(prompt):
+def generate_image(prompt, max_retries=3):
     print("Generating image with prompt: ", prompt)
-    # 70% chance to use Replicate
-    use_replicate = random.random() < 0.7
+    for attempt in range(max_retries):
+        try:
+            # 70% chance to use Replicate
+            use_replicate = random.random() < 0.7
+            
+            if use_replicate:
+                input_data = {
+                    "prompt": prompt,
+                    "guidance": 3.5,
+                    "aspect_ratio": "9:16",
+                    "output_format": "jpg"
+                }
+                output = replicate_client.run(
+                    "black-forest-labs/flux-dev",
+                    input=input_data
+                )
+                print("Using Replicate API")
+                return output[0]  # Return the first image URL
+            else:
+                handler = fal_client.submit(
+                    "fal-ai/flux-realism",
+                    arguments={
+                        "prompt": prompt,
+                        "image_size": "portrait_16_9",  # This is the closest to 9:16 aspect ratio
+                        "num_inference_steps": 28,
+                        "guidance_scale": 3.5,
+                        "num_images": 1,
+                        "output_format": "jpeg"
+                    },
+                )
+                result = handler.get()
+                print("Using Fal API")
+                return result['images'][0]['url']
+        except Exception as e:
+            print(f"Error generating image (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            if attempt == max_retries - 1:
+                raise Exception("Failed to generate image after multiple attempts")
+            else:
+                print("Retrying with a modified prompt...")
+                prompt = f"Family-friendly version: {prompt}"
     
-    if use_replicate:
-        input_data = {
-            "prompt": prompt,
-            "guidance": 3.5,
-            "aspect_ratio": "9:16",
-            "output_format": "jpg"
-        }
-        output = replicate_client.run(
-            "black-forest-labs/flux-dev",
-            input=input_data
-        )
-        print("Using Replicate API")
-        return output[0]  # Return the first image URL
-    else:
-        handler = fal_client.submit(
-            "fal-ai/flux-realism",
-            arguments={
-                "prompt": prompt,
-                "image_size": "portrait_16_9",  # This is the closest to 9:16 aspect ratio
-                "num_inference_steps": 28,
-                "guidance_scale": 3.5,
-                "num_images": 1,
-                "output_format": "jpeg"
-            },
-        )
-        result = handler.get()
-        print("Using Fal API")
-        return result['images'][0]['url']
+    raise Exception("Failed to generate image after multiple attempts")
 
 
 def generate_outfit_message(details):
