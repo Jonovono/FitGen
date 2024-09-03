@@ -24,6 +24,18 @@ os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
 client = OpenAI(api_key=OPENAI_API_KEY)
 replicate_client = replicate.Client(api_token=REPLICATE_API_TOKEN)
 
+st.set_page_config(
+    page_title="fitgen.shop - generate outfits for weddings",
+    page_icon="👗",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get help': "mailto:jordan@drip.farm",
+        'About': 'https://discord.gg/TPmx2Kmrzz',
+    }
+)
+
+
 # Reducing whitespace on the top of the page
 st.markdown("""
 <style>
