@@ -30,7 +30,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get help': "mailto:jordan@drip.farm",
+        'Get help': "https://discord.gg/TPmx2Kmrzz",
         'About': 'https://discord.gg/TPmx2Kmrzz',
     }
 )
