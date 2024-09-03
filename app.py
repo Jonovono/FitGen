@@ -56,13 +56,13 @@ for key, value in default_values.items():
         st.session_state[key] = value
 
 def make_api_call():
-    model = random.choice(["gpt-4o-2024-08-06", "claude-3-5-sonnet-20240620"])
-    # model = "claude-3-5-sonnet-20240620"
+    # model = random.choice(["gpt-4o-2024-08-06", "claude-3-5-sonnet-20240620"])
+    model = "claude-3-5-sonnet-20240620"
 
     response = completion(
         model=model,
         messages=st.session_state.messages,
-        max_tokens=600
+        # max_tokens=600
     )
     
     msg = response.choices[0].message.content
@@ -176,7 +176,8 @@ def get_random_image_url():
 
 
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "system", "content": "You are a fashion expert. Generate a stable diffusion prompt to generate an image of a unique and elegant wedding outfit design for an attendee based on the following details of the wedding event that I am attending. The user will then follow up if they like the outfit that was generated or not, so continously improve your outfit based on the feedback. Describe in as much detail as possible the outfit, including hair, makeup, accessories, and shoes. Please put the person and outfit in an appropriate setting based on the event details. Respond with the prompt only."},]
+    st.session_state["messages"] = [{"role": "system", "content": "You are a fashion expert. Generate a stable diffusion prompt to generate an image of a unique and elegant wedding outfit design for a beautiful women in her mid 20s attending a wedding event based on the following details of the wedding event that they are attending. The user will then follow up if they like the outfit that was generated or not, so continously improve your outfit based on the feedback. Describe in as much detail as possible the outfit, including hair, makeup, accessories, and shoes. Ensure it is a fully body shot by describing the shoes in detail as well. Please put the person and outfit in an appropriate setting based on the event details. Respond with the prompt to generate the image only."},]
+    st.session_state["messages"].append({"role": "user", "content": "Here is an example of a prompt: A beautiful woman in her mid-20s with vibrant red hair and medium skin tone stands in front of a charming Toronto church on a sunny summer day. She wears a knee-length, flowy sundress in soft pastel peach with delicate floral embroidery. The dress features thin straps and a sweetheart neckline, cinched at the waist with a light cream ribbon. She pairs the dress with elegant nude strappy sandals with a low heel. Her hair is styled in loose, beachy waves adorned with a small white flower clip. Her makeup is natural and radiant, with peachy blush and a soft pink lip. She accessorizes with dainty gold jewelry, including small hoop earrings and a thin bracelet. She carries a small cream-colored clutch and wears oversized sunglasses perched on top of her head. The background shows other casually dressed wedding guests arriving at the church, with leafy green trees and blue sky visible. Soft, warm lighting enhances the summery atmosphere."})
 
 
 if 'current_image' not in st.session_state:
